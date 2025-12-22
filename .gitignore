@@ -12,4 +12,4 @@ frontend/dist/
 
 # OS
 .DS_Store
-EOF
+EOFfrontend/.env.local

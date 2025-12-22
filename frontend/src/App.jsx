@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 // Backend base URL (you can override with VITE_BACKEND_URL later)
-const BACKEND = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+// Prod: same-origin ("" -> /api/...)
+// Dev: set VITE_BACKEND_URL in frontend/.env.local
+const BACKEND = import.meta.env.VITE_BACKEND_URL || "";
 
 export default function App() {
   // Events state + loading/error so you don't show "No events" while loading
