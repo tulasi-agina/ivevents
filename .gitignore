@@ -12,4 +12,11 @@ frontend/dist/
 
 # OS
 .DS_Store
-EOFfrontend/.env.local
+frontend/.env.local
+
+# Other
+frontend/dist/
+backend/__pycache__/
+backend/migrations/__pycache__/
+*.pyc
+.DS_Store
