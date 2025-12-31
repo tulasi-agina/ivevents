@@ -1,66 +1,79 @@
-# backend/app.py
-# Flask API server + Google OAuth routes.
-
 import os
-from flask import Flask, jsonify
-from flask_cors import CORS
+from flask import Flask
+from extensions import db, migrate
 from dotenv import load_dotenv
 
-from auth import auth_bp, init_oauth
-
-# Load environment variables from .env (repo root or backend/.env)
+# Load environment variables from .env
 load_dotenv()
 
-app = Flask(__name__)
+def create_app():
+    app = Flask(__name__)
 
-# Needed for Flask sessions (cookies). Use a long random string in real use.
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
+    # Config
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# Cookie settings: Lax is good for OAuth redirects in most cases
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-)
+    # Initialize extensions
+    db.init_app(app)
+    migrate.init_app(app, db)
 
-# Allow your React dev server to call Flask and include cookies
-frontend_origin = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
-CORS(app, origins=[frontend_origin], supports_credentials=True)
+    from models import User, Event, UserPreference  # noqa: F401
 
-# Initialize OAuth + register auth blueprint
-init_oauth(app)
-app.register_blueprint(auth_bp)
+    from auth_routes import auth_bp
+    app.register_blueprint(auth_bp)
+
+    from events_routes import events_bp
+    app.register_blueprint(events_bp)
+
+    from preferences_routes import prefs_bp
+    app.register_blueprint(prefs_bp)
+
+    from debug_routes import debug_bp
+    app.register_blueprint(debug_bp)
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
 
 
-@app.get("/api/health")
-def health():
-    return jsonify({"ok": True})
+    @app.get("/db-check")
+    def db_check():
+        # Create or fetch a deterministic test user
+        test_email = "db-check@ivevents.local"
+        user = User.query.filter_by(email=test_email).first()
+        if user is None:
+            user = User(email=test_email, full_name="DB Check User")
+            db.session.add(user)
+            db.session.commit()
 
-# Temporary events endpoint for MVP
-@app.get("/api/events")
-def get_events():
-    # Temporary in-memory events for MVP.
-    # Later, these will come from PostgreSQL.
-    events = [
-        {
-            "id": 1,
-            "title": "Sunset Beach Volleyball",
-            "date": "2025-12-28",
-            "location": "East Beach, Santa Barbara",
-        },
-        {
-            "id": 2,
-            "title": "Local Art Walk",
-            "date": "2026-01-03",
-            "location": "Downtown SB",
-        },
-        {
-            "id": 3,
-            "title": "Coffee & Code Meetup",
-            "date": "2026-01-05",
-            "location": "Isla Vista",
-        },
-    ]
-    return jsonify({"events": events})
+        # Create or fetch a deterministic test event
+        existing_event = Event.query.filter_by(title="DB Check Event").first()
+        if existing_event is None:
+            from datetime import datetime, timedelta, timezone
+            starts = datetime.now(timezone.utc) + timedelta(minutes=5)
+            ends = starts + timedelta(hours=1)
+
+            existing_event = Event(
+                title="DB Check Event",
+                description="Created by /db-check",
+                starts_at=starts,
+                ends_at=ends,
+                created_by_user_id=user.id,
+            )
+            db.session.add(existing_event)
+            db.session.commit()
+
+        return {
+            "ok": True,
+            "user_id": str(user.id),
+            "event_id": str(existing_event.id),
+        }
+
+
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)
